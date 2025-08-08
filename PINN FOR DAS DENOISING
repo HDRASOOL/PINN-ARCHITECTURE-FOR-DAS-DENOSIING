@@ -1,0 +1,57 @@
+def pde_residual(model, X):
+    with tf.GradientTape(persistent=True) as tape2:
+        tape2.watch(X)
+        with tf.GradientTape(persistent=True) as tape1:
+            tape1.watch(X)
+            u = model(X)
+        u_x = tape1.gradient(u, X)[:, 0:1]
+        u_t = tape1.gradient(u, X)[:, 1:2]
+    u_xx = tape2.gradient(u_x, X)[:, 0:1]
+    u_tt = tape2.gradient(u_t, X)[:, 1:2]
+    alpha = 0.01
+    c = 1.0
+    return u_tt + alpha * u_t - c**2 * u_xx
+
+# Reinitialize model with refined architecture
+model = PINN()
+optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+mse = tf.keras.losses.MeanSquaredError()
+
+@tf.function
+def train_step():
+    with tf.GradientTape() as tape:
+        # PDE residual loss
+        f_pred = pde_residual(model, X_colloc_tf)
+        loss_pde = mse(tf.zeros_like(f_pred), f_pred)
+
+        # Boundary losses
+        u_pred_left = model(X_bnd_left)
+        u_pred_right = model(X_bnd_right)
+        loss_bnd = mse(u_bnd, u_pred_left) + mse(u_bnd, u_pred_right)
+
+        # Initial condition loss
+        u_pred_init = model(X_init)
+        loss_init = mse(u_init, u_pred_init)
+
+        # Supervised loss
+        u_pred_sup = model(X_train_tf)
+        loss_sup = mse(y_train_tf, u_pred_sup)
+
+        # Weighted total loss
+        loss = (
+            1.0 * loss_pde +
+            1.0 * loss_bnd +
+            1.0 * loss_init +
+            20.0 * loss_sup
+        )
+
+    grads = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    return loss
+
+# Train the model for a sufficient number of epochs
+epochs = 2000 # Increased number of epochs for better convergence
+for epoch in range(epochs + 1):
+    loss_val = train_step()
+    if epoch % 500 == 0: # Print less frequently for more epochs
+        tf.print(f"Epoch {epoch}, Loss: {loss_val}")
