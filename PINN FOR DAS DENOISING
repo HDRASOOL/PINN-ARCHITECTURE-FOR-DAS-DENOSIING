@@ -1,3 +1,10 @@
+class PINN(tf.keras.Model):
+    def __init__(self):
+        super(PINN, self).__init__()
+        self.hidden1 = tf.keras.layers.Dense(50, activation=tf.nn.swish)
+        self.hidden2 = tf.keras.layers.Dense(50, activation=tf.nn.swish)
+        self.hidden3 = tf.keras.layers.Dense(50, activation=tf.nn.swish)
+        self.out = tf.keras.layers.Dense(1)
 def pde_residual(model, X):
     with tf.GradientTape(persistent=True) as tape2:
         tape2.watch(X)
